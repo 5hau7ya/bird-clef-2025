@@ -1,0 +1,59 @@
+{
+  "audio": {
+    "sample_rate": 32000,
+    "chunk_duration": 20,
+    "inference_stride": 5,
+    "n_mels": 224,
+    "n_fft": 4096,
+    "hop_length": 1252,
+    "spectrogram_width": 512,
+    "fmin": 0,
+    "fmax": 16000,
+    "top_db": 80,
+    "normalization": "absmax_per_final_20_second_chunk_then_db_range_to_unit_interval"
+  },
+  "model": {
+    "num_classes": 206,
+    "backbone": "efficientnet_b0",
+    "pretrained": false,
+    "dropout": 0.2,
+    "drop_path_rate": 0.0
+  },
+  "training": {
+    "epochs": 15,
+    "batch_size": 64,
+    "learning_rate": 0.0005,
+    "final_learning_rate": 0.000001,
+    "weight_decay": 0.0001,
+    "scheduler_restart_epochs": 5,
+    "mixup_probability": 0.5,
+    "mixup_alpha": 0.5,
+    "num_workers": 0,
+    "random_seed": 2025,
+    "validation_fraction": 0.2,
+    "checkpoint_dir": "/kaggle/working/artifacts/supervised_teacher"
+  },
+  "self_training": {
+    "iterations": 3
+  },
+  "ensemble": {
+    "final_ensemble_checkpoints": 3,
+    "checkpoint_paths": []
+  },
+  "paths": {
+    "train_metadata": "/kaggle/input/competitions/birdclef-2025/train.csv",
+    "taxonomy": "/kaggle/input/competitions/birdclef-2025/taxonomy.csv",
+    "sample_submission": "/kaggle/input/competitions/birdclef-2025/sample_submission.csv",
+    "train_audio_dir": "/kaggle/input/competitions/birdclef-2025/train_audio",
+    "unlabeled_soundscapes_dir": "/kaggle/input/competitions/birdclef-2025/train_soundscapes",
+    "label_mapping": "/kaggle/working/artifacts/label_mapping.json",
+    "split": "/kaggle/working/artifacts/train_validation_split.csv",
+    "data_audit": "/kaggle/working/artifacts/data_audit.json"
+  },
+  "inference": {
+    "window_duration_seconds": 20,
+    "window_stride_seconds": 5,
+    "delta_shift_enabled": false,
+    "temporal_smoothing_enabled": false
+  }
+}

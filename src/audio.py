@@ -113,7 +113,18 @@ class AudioPreprocessor:
         """Produce one normalized Mel image with shape ``(n_mels, width)``."""
         if len(normalized_chunk) != self.config.chunk_samples:
             raise ValueError("mel_spectrogram requires a final chunk of exactly chunk_duration")
-        waveform = torch.from_numpy(normalized_chunk)
+        unit_interval = self.power_to_unit_mel(self.mel_power_spectrogram(normalized_chunk))
+        if unit_interval.shape != (self.config.n_mels, self.config.spectrogram_width):
+            raise RuntimeError(
+                f"Unexpected Mel shape {unit_interval.shape}; expected "
+                f"({self.config.n_mels}, {self.config.spectrogram_width})"
+            )
+        return unit_interval
+
+    def mel_power_spectrogram(self, waveform: np.ndarray) -> np.ndarray:
+        """Return a Mel-power array for an arbitrary-length normalized waveform."""
+        waveform = self._as_mono(waveform)
+        waveform = torch.from_numpy(waveform)
         spectrum = torch.stft(
             waveform,
             n_fft=self.config.n_fft,
@@ -124,22 +135,22 @@ class AudioPreprocessor:
             pad_mode="constant",
             return_complex=True,
         )
-        mel_power = self._mel_filter @ spectrum.abs().square()
-        maximum = mel_power.max()
+        return (self._mel_filter @ spectrum.abs().square()).numpy().astype(np.float32, copy=False)
+
+    def power_to_unit_mel(self, mel_power: np.ndarray) -> np.ndarray:
+        """Apply this project's local-reference 80 dB conversion to a power Mel array."""
+        mel_power = np.asarray(mel_power, dtype=np.float32)
+        if mel_power.ndim != 2 or mel_power.shape[0] != self.config.n_mels:
+            raise ValueError("mel_power must have shape (n_mels, time_frames)")
+        mel_power_tensor = torch.from_numpy(mel_power)
+        maximum = mel_power_tensor.max()
         if maximum <= self.config.epsilon:
-            unit_interval = np.zeros(tuple(mel_power.shape), dtype=np.float32)
-        else:
-            # Equivalent to a reference-at-maximum dB conversion, capped to
-            # the configured 80 dB dynamic range before mapping to [0, 1].
-            db = 10.0 * torch.log10(torch.clamp(mel_power, min=self.config.epsilon) / maximum)
-            db = torch.clamp(db, min=-self.config.top_db, max=0.0)
-            unit_interval = ((db + self.config.top_db) / self.config.top_db).numpy()
-        if unit_interval.shape != (self.config.n_mels, self.config.spectrogram_width):
-            raise RuntimeError(
-                f"Unexpected Mel shape {unit_interval.shape}; expected "
-                f"({self.config.n_mels}, {self.config.spectrogram_width})"
-            )
-        return unit_interval.astype(np.float32, copy=False)
+            return np.zeros(tuple(mel_power_tensor.shape), dtype=np.float32)
+        # Equivalent to a reference-at-maximum dB conversion, capped to
+        # the configured 80 dB dynamic range before mapping to [0, 1].
+        db = 10.0 * torch.log10(torch.clamp(mel_power_tensor, min=self.config.epsilon) / maximum)
+        db = torch.clamp(db, min=-self.config.top_db, max=0.0)
+        return ((db + self.config.top_db) / self.config.top_db).numpy().astype(np.float32, copy=False)
 
     def waveform_to_tensor(
         self, waveform: np.ndarray, mode: CropMode = "train", start_sample: int | None = None

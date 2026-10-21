@@ -34,7 +34,11 @@
     "checkpoint_dir": "/kaggle/working/bird-clef-2025/artifacts/supervised_teacher"
   },
   "self_training": {
-    "iterations": 3
+    "iterations": 3,
+    "first_iteration_epochs": 25,
+    "drop_path_rate": 0.15,
+    "mix_coefficient": 0.5,
+    "checkpoint_dir": "/kaggle/working/bird-clef-2025/artifacts/self_training/iteration_1"
   },
   "ensemble": {
     "final_ensemble_checkpoints": 3,

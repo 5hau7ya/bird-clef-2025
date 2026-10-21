@@ -31,7 +31,7 @@
     "num_workers": 0,
     "random_seed": 2025,
     "validation_fraction": 0.2,
-    "checkpoint_dir": "artifacts/supervised_teacher"
+    "checkpoint_dir": "/kaggle/working/bird-clef-2025/artifacts/supervised_teacher"
   },
   "self_training": {
     "iterations": 3
@@ -41,14 +41,14 @@
     "checkpoint_paths": []
   },
   "paths": {
-    "train_metadata": "data/train.csv",
-    "taxonomy": "data/taxonomy.csv",
-    "sample_submission": "data/sample_submission.csv",
-    "train_audio_dir": "data/train_audio",
-    "unlabeled_soundscapes_dir": "data/train_soundscapes",
-    "label_mapping": "artifacts/label_mapping.json",
-    "split": "artifacts/train_validation_split.csv",
-    "data_audit": "artifacts/data_audit.json"
+    "train_metadata": "/kaggle/input/competitions/birdclef-2025/train.csv",
+    "taxonomy": "/kaggle/input/competitions/birdclef-2025/taxonomy.csv",
+    "sample_submission": "/kaggle/input/competitions/birdclef-2025/sample_submission.csv",
+    "train_audio_dir": "/kaggle/input/competitions/birdclef-2025/train_audio",
+    "unlabeled_soundscapes_dir": "/kaggle/input/competitions/birdclef-2025/train_soundscapes",
+    "label_mapping": "/kaggle/working/bird-clef-2025/artifacts/label_mapping.json",
+    "split": "/kaggle/working/bird-clef-2025/artifacts/train_validation_split.csv",
+    "data_audit": "/kaggle/working/bird-clef-2025/artifacts/data_audit.json"
   },
   "inference": {
     "window_duration_seconds": 20,

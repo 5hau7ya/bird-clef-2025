@@ -34,6 +34,13 @@ def checkpoint_identifier(path: Path) -> str:
     return f"{path.stem}-{digest.hexdigest()[:12]}"
 
 
+def transform_pseudo_scores(scores: np.ndarray, exponent: float) -> np.ndarray:
+    """Apply the configured probability power once, before sampling/training."""
+    if exponent <= 0 or not np.isfinite(exponent):
+        raise ValueError("pseudo-label exponent must be finite and greater than zero")
+    return np.power(np.clip(np.asarray(scores, dtype=np.float32), 0.0, 1.0), exponent).astype(np.float32)
+
+
 class PseudoLabelStore:
     """Read stored segment scores and construct aligned 20-second soft targets."""
 
@@ -137,6 +144,7 @@ def generate_pseudo_labels(
     output_root: Path,
     mapping_path: Path,
     batch_size: int = 16,
+    exponent: float = 1.0,
 ) -> Path:
     """Run one teacher across soundscapes and persist a new immutable version directory."""
     if not checkpoint_path.is_file():
@@ -144,7 +152,8 @@ def generate_pseudo_labels(
     soundscapes = sorted(soundscape_directory.glob("*.ogg"))
     if not soundscapes:
         raise FileNotFoundError(f"No .ogg soundscapes in {soundscape_directory}")
-    version = checkpoint_identifier(checkpoint_path)
+    teacher_identifier = checkpoint_identifier(checkpoint_path)
+    version = f"{teacher_identifier}-power-{exponent:.6g}"
     output_directory = output_root / version
     if output_directory.exists():
         raise FileExistsError(f"Pseudo-label version already exists: {output_directory}")
@@ -157,6 +166,7 @@ def generate_pseudo_labels(
             for position, soundscape in enumerate(soundscapes, start=1):
                 waveform = inferencer.preprocessor.load_audio(soundscape)
                 scores, _ = inferencer.predict_waveform(waveform)
+                scores = transform_pseudo_scores(scores, exponent)
                 starts = np.arange(len(scores), dtype=np.float32) * inferencer.settings.stride_seconds
                 ends = np.minimum(starts + inferencer.settings.stride_seconds, len(waveform) / inferencer.preprocessor.config.sample_rate)
                 weight = float(scores.max(axis=0).sum())
@@ -185,13 +195,15 @@ def generate_pseudo_labels(
         )
         metadata: dict[str, Any] = {
             "version": version,
-            "teacher_checkpoint": {"path": str(checkpoint_path), "identifier": version},
+            "teacher_checkpoint": {"path": str(checkpoint_path), "identifier": teacher_identifier},
             "score_format": "five-second framewise-stitch-then-max-pooled class probabilities",
             "num_classes": int(all_scores[0].shape[1]),
             "pseudo_label_configuration": {
                 "crop_duration_seconds": 20,
                 "crop_stride_seconds": 5,
                 "crop_target_operation": "classwise maximum of four contiguous five-second score vectors",
+                "probability_power_exponent": exponent,
+                "power_applied_at": "pseudo-label generation only",
                 "sampling_weight": "sum_c max_t score[t, c] per recording",
             },
             "audio_preprocessing": asdict(inferencer.preprocessor.config),
@@ -217,8 +229,10 @@ if __name__ == "__main__":
     parser.add_argument("--output-root", type=Path, default=Path("artifacts/pseudo_labels"))
     parser.add_argument("--mapping", type=Path, default=Path("artifacts/label_mapping.json"))
     parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--exponent", type=float, default=1.0, help="Power applied once to teacher probabilities.")
     arguments = parser.parse_args()
     directory = generate_pseudo_labels(
-        arguments.checkpoint, arguments.soundscapes, arguments.output_root, arguments.mapping, arguments.batch_size
+        arguments.checkpoint, arguments.soundscapes, arguments.output_root, arguments.mapping,
+        arguments.batch_size, arguments.exponent
     )
     print(f"Wrote pseudo-label version: {directory}")

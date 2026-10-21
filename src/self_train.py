@@ -137,10 +137,17 @@ def train_one_student_iteration(
     pseudo_directory: Path,
     epochs_override: int | None = None,
     device_override: str | None = None,
+    teacher_checkpoint: Path | None = None,
+    output_directory: Path | None = None,
+    iteration: int = 1,
+    pseudo_label_exponent: float = 1.0,
+    seed_override: int | None = None,
 ) -> Path:
     root = config_path.parent.parent
     config = json.loads(config_path.read_text(encoding="utf-8"))
-    training, self_training = config["training"], config["self_training"]
+    training, self_training = dict(config["training"]), config["self_training"]
+    if seed_override is not None:
+        training["random_seed"] = seed_override
     set_seed(training["random_seed"])
     device = resolve_device(device_override or training.get("device", "auto"))
     configure_accelerator(device, bool(training.get("allow_tf32", True)))
@@ -155,7 +162,9 @@ def train_one_student_iteration(
     pseudo_loader = DataLoader(pseudo_train, sampler=sampler, **loader_kwargs)
     validation_loader = DataLoader(labelled_validation, shuffle=False, **loader_kwargs)
 
-    teacher_path = root / training["checkpoint_dir"] / "best_supervised_teacher.pt"
+    teacher_path = teacher_checkpoint or root / training["checkpoint_dir"] / "best_supervised_teacher.pt"
+    if not teacher_path.is_file():
+        raise FileNotFoundError(f"Teacher checkpoint does not exist: {teacher_path}")
     teacher = torch.load(teacher_path, map_location="cpu", weights_only=False)
     # Keep ordinary head dropout from the teacher configuration; only stochastic
     # depth changes for the noisy student.
@@ -169,8 +178,9 @@ def train_one_student_iteration(
     loss_function = nn.BCEWithLogitsLoss()
     mixed_precision = cuda_amp_enabled(training, device)
     scaler = make_grad_scaler(device, mixed_precision)
-    output_directory = root / self_training["checkpoint_dir"]
+    output_directory = output_directory or root / self_training["checkpoint_dir"]
     output_directory.mkdir(parents=True, exist_ok=True)
+    best_checkpoint = output_directory / f"best_student_iteration_{iteration}.pt"
     summary = weight_summary(pseudo_train.weights)
     (output_directory / "pseudo_sampler_weight_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     epochs = epochs_override or self_training["first_iteration_epochs"]
@@ -215,9 +225,20 @@ def train_one_student_iteration(
                     "self_training_config": self_training, "teacher_checkpoint": str(teacher_path),
                     "pseudo_label_directory": str(pseudo_directory), "pseudo_sampler_weight_summary": summary,
                     "runtime": {"device": str(device), "mixed_precision": mixed_precision},
-                }, output_directory / "best_student_iteration_1.pt")
+                    "iteration": iteration, "pseudo_label_exponent": pseudo_label_exponent,
+                }, best_checkpoint)
             print(json.dumps(record), flush=True)
-    return output_directory / "best_student_iteration_1.pt"
+    (output_directory / "lineage.json").write_text(json.dumps({
+        "iteration": iteration,
+        "teacher_checkpoint": str(teacher_path),
+        "pseudo_label_directory": str(pseudo_directory),
+        "pseudo_label_exponent": pseudo_label_exponent,
+        "training_seed": training["random_seed"],
+        "best_validation_macro_auc": best_auc,
+        "final_checkpoint": str(best_checkpoint),
+        "training_data_version": str(pseudo_directory),
+    }, indent=2), encoding="utf-8")
+    return best_checkpoint
 
 
 if __name__ == "__main__":
@@ -226,5 +247,14 @@ if __name__ == "__main__":
     parser.add_argument("--config", type=Path, default=Path("config/project_config.json"))
     parser.add_argument("--epochs", type=int)
     parser.add_argument("--device", choices=("auto", "cpu", "cuda", "cuda:0", "mps"))
+    parser.add_argument("--teacher-checkpoint", type=Path)
+    parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--iteration", type=int, default=1)
+    parser.add_argument("--pseudo-label-exponent", type=float, default=1.0)
+    parser.add_argument("--seed", type=int)
     arguments = parser.parse_args()
-    print(train_one_student_iteration(arguments.config, arguments.pseudo_directory, arguments.epochs, arguments.device))
+    print(train_one_student_iteration(
+        arguments.config, arguments.pseudo_directory, arguments.epochs, arguments.device,
+        arguments.teacher_checkpoint, arguments.output_dir, arguments.iteration, arguments.pseudo_label_exponent,
+        arguments.seed,
+    ))

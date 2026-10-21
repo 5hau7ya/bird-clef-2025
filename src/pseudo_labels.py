@@ -206,7 +206,7 @@ def generate_pseudo_labels(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate a versioned five-second pseudo-label dataset.")
     parser.add_argument("checkpoint", type=Path)
-    parser.add_argument("--soundscapes", type=Path, default=Path("/kaggle/input/competitions/birdclef-2025/train_soundscapes"))
+    parser.add_argument("--soundscapes", type=Path, default=Path("data/train_soundscapes"))
     parser.add_argument("--output-root", type=Path, default=Path("artifacts/pseudo_labels"))
     parser.add_argument("--mapping", type=Path, default=Path("artifacts/label_mapping.json"))
     parser.add_argument("--batch-size", type=int, default=16)

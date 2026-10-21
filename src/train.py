@@ -28,23 +28,58 @@ def set_seed(seed: int) -> None:
     torch.manual_seed(seed)
 
 
+def resolve_device(requested: str = "auto") -> torch.device:
+    """Resolve an explicit device request; never silently ignore `cuda`."""
+    if requested == "auto":
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        if torch.backends.mps.is_available():
+            return torch.device("mps")
+        return torch.device("cpu")
+    device = torch.device(requested)
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("CUDA was requested but is unavailable. Enable a Kaggle GPU accelerator first.")
+    if device.type == "mps" and not torch.backends.mps.is_available():
+        raise RuntimeError("MPS was requested but is unavailable.")
+    return device
+
+
 def best_device() -> torch.device:
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
+    return resolve_device("auto")
+
+
+def configure_accelerator(device: torch.device, allow_tf32: bool) -> None:
+    if device.type == "cuda":
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cuda.matmul.allow_tf32 = allow_tf32
+        torch.backends.cudnn.allow_tf32 = allow_tf32
+
+
+def data_loader_kwargs(training: dict, device: torch.device) -> dict:
+    workers = int(training["num_workers"])
+    kwargs = {
+        "batch_size": training["batch_size"],
+        "num_workers": workers,
+        "pin_memory": bool(training.get("pin_memory", True) and device.type == "cuda"),
+    }
+    if workers > 0:
+        kwargs["persistent_workers"] = bool(training.get("persistent_workers", True))
+    return kwargs
+
+
+def make_grad_scaler(device: torch.device, enabled: bool) -> torch.amp.GradScaler:
+    return torch.amp.GradScaler("cuda", enabled=enabled and device.type == "cuda")
+
+
+def cuda_amp_enabled(training: dict, device: torch.device) -> bool:
+    return bool(training.get("mixed_precision", True) and device.type == "cuda")
 
 
 def waveform_batch_to_inputs(
     chunks: torch.Tensor, preprocessor: AudioPreprocessor, device: torch.device
 ) -> torch.Tensor:
-    """Normalize and transform already-MixUp'ed `(B, samples)` chunks to CNN inputs."""
-    tensors = [
-        preprocessor.waveform_to_tensor(chunk.numpy(), mode="validation")
-        for chunk in chunks.cpu()
-    ]
-    return torch.stack(tensors).to(device, non_blocking=True)
+    """GPU-capable waveform-to-CNN transform for already-MixUp'ed chunks."""
+    return preprocessor.chunks_to_tensor(chunks, device)
 
 
 def mixup_waveforms(
@@ -81,14 +116,17 @@ def validate(
     preprocessor: AudioPreprocessor,
     device: torch.device,
     loss_function: nn.Module,
+    mixed_precision: bool = False,
 ) -> tuple[float, float, np.ndarray, np.ndarray]:
     model.eval()
     losses, all_targets, all_probabilities = [], [], []
     for chunks, targets in loader:
         inputs = waveform_batch_to_inputs(chunks, preprocessor, device)
-        targets = targets.to(device)
-        logits = clip_logits(model(inputs))
-        losses.append(loss_function(logits, targets).item())
+        targets = targets.to(device, non_blocking=device.type == "cuda")
+        with torch.autocast(device_type=device.type, enabled=mixed_precision and device.type == "cuda"):
+            logits = clip_logits(model(inputs))
+            loss = loss_function(logits, targets)
+        losses.append(loss.item())
         all_targets.append(targets.cpu().numpy())
         all_probabilities.append(torch.sigmoid(logits).cpu().numpy())
     targets_array = np.concatenate(all_targets)
@@ -96,13 +134,14 @@ def validate(
     return float(np.mean(losses)), macro_auc(targets_array, probabilities_array), targets_array, probabilities_array
 
 
-def train(config_path: Path, epochs_override: int | None = None) -> Path:
+def train(config_path: Path, epochs_override: int | None = None, device_override: str | None = None) -> Path:
     root = config_path.parent.parent
     with config_path.open(encoding="utf-8") as handle:
         config = json.load(handle)
     training = config["training"]
     set_seed(training["random_seed"])
-    device = best_device()
+    device = resolve_device(device_override or training.get("device", "auto"))
+    configure_accelerator(device, bool(training.get("allow_tf32", True)))
     audio_preprocessor = AudioPreprocessor(AudioConfig.from_json(config_path), seed=training["random_seed"])
     paths = {name: root / value for name, value in config["paths"].items()}
     train_dataset = LabelledWaveformDataset(
@@ -111,7 +150,7 @@ def train(config_path: Path, epochs_override: int | None = None) -> Path:
     validation_dataset = LabelledWaveformDataset(
         "validation", paths["split"], paths["label_mapping"], paths["train_audio_dir"], audio_preprocessor
     )
-    loader_args = {"batch_size": training["batch_size"], "num_workers": training["num_workers"]}
+    loader_args = data_loader_kwargs(training, device)
     train_loader = DataLoader(train_dataset, shuffle=True, **loader_args)
     validation_loader = DataLoader(validation_dataset, shuffle=False, **loader_args)
     model_config = SEDConfig.from_json(config_path)
@@ -124,6 +163,8 @@ def train(config_path: Path, epochs_override: int | None = None) -> Path:
         eta_min=training["final_learning_rate"],
     )
     loss_function = nn.BCEWithLogitsLoss()
+    mixed_precision = cuda_amp_enabled(training, device)
+    scaler = make_grad_scaler(device, mixed_precision)
     output_dir = root / training["checkpoint_dir"]
     output_dir.mkdir(parents=True, exist_ok=True)
     epochs = epochs_override or training["epochs"]
@@ -141,15 +182,17 @@ def train(config_path: Path, epochs_override: int | None = None) -> Path:
                     chunks, targets, training["mixup_probability"], training["mixup_alpha"]
                 )
                 inputs = waveform_batch_to_inputs(chunks, audio_preprocessor, device)
-                targets = targets.to(device)
+                targets = targets.to(device, non_blocking=device.type == "cuda")
                 optimizer.zero_grad(set_to_none=True)
-                loss = loss_function(clip_logits(model(inputs)), targets)
-                loss.backward()
-                optimizer.step()
+                with torch.autocast(device_type=device.type, enabled=mixed_precision):
+                    loss = loss_function(clip_logits(model(inputs)), targets)
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
                 scheduler.step(epoch + (batch_index + 1) / len(train_loader))
                 losses.append(loss.item())
             validation_loss, validation_auc, y_true, y_score = validate(
-                model, validation_loader, audio_preprocessor, device, loss_function
+                model, validation_loader, audio_preprocessor, device, loss_function, mixed_precision
             )
             record = {
                 "epoch": epoch + 1,
@@ -173,6 +216,7 @@ def train(config_path: Path, epochs_override: int | None = None) -> Path:
                         "model_config": asdict(model_config),
                         "audio_config": asdict(audio_preprocessor.config),
                         "training_config": training,
+                        "runtime": {"device": str(device), "mixed_precision": mixed_precision},
                         "label_mapping_path": str(paths["label_mapping"]),
                     },
                     output_dir / "best_supervised_teacher.pt",
@@ -185,6 +229,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train the initial supervised BirdCLEF teacher.")
     parser.add_argument("--config", type=Path, default=Path("config/project_config.json"))
     parser.add_argument("--epochs", type=int, help="Override configured epoch count for a smoke run.")
+    parser.add_argument("--device", choices=("auto", "cpu", "cuda", "cuda:0", "mps"))
     arguments = parser.parse_args()
-    checkpoint = train(arguments.config, arguments.epochs)
+    checkpoint = train(arguments.config, arguments.epochs, arguments.device)
     print(f"Best checkpoint: {checkpoint}")

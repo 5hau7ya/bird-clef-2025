@@ -175,6 +175,41 @@ class AudioPreprocessor:
             raise ValueError("Cannot create a batch from zero waveforms")
         return torch.stack(tensors, dim=0)
 
+    def chunks_to_tensor(self, chunks: torch.Tensor, device: torch.device) -> torch.Tensor:
+        """Transform a batch of final waveform chunks on the requested device.
+
+        This is the training fast path. On CUDA it performs absmax
+        normalization, STFT, Mel projection, dB conversion, and channel
+        duplication without moving each sample back through NumPy/Python.
+        The output remains ``(B, 3, n_mels, spectrogram_width)``.
+        """
+        if chunks.ndim != 2 or chunks.shape[1] != self.config.chunk_samples:
+            raise ValueError("chunks must have shape (B, chunk_samples)")
+        chunks = chunks.to(device=device, dtype=torch.float32, non_blocking=device.type == "cuda")
+        maxima = chunks.abs().amax(dim=1, keepdim=True)
+        normalized = chunks / maxima.clamp_min(self.config.epsilon)
+        window = self._window.to(device)
+        mel_filter = self._mel_filter.to(device)
+        spectrum = torch.stft(
+            normalized,
+            n_fft=self.config.n_fft,
+            hop_length=self.config.hop_length,
+            win_length=self.config.n_fft,
+            window=window,
+            center=True,
+            pad_mode="constant",
+            return_complex=True,
+        )
+        mel_power = torch.matmul(mel_filter, spectrum.abs().square())
+        maxima = mel_power.amax(dim=(1, 2), keepdim=True)
+        db = 10.0 * torch.log10(mel_power.clamp_min(self.config.epsilon) / maxima.clamp_min(self.config.epsilon))
+        unit_mel = ((db.clamp(min=-self.config.top_db, max=0.0) + self.config.top_db) / self.config.top_db)
+        unit_mel = torch.where(maxima > self.config.epsilon, unit_mel, torch.zeros_like(unit_mel))
+        expected = (chunks.shape[0], self.config.n_mels, self.config.spectrogram_width)
+        if tuple(unit_mel.shape) != expected:
+            raise RuntimeError(f"Unexpected batch Mel shape {tuple(unit_mel.shape)}; expected {expected}")
+        return unit_mel.unsqueeze(1).repeat(1, 3, 1, 1)
+
     @staticmethod
     def _as_mono(waveform: np.ndarray) -> np.ndarray:
         waveform = np.asarray(waveform, dtype=np.float32)

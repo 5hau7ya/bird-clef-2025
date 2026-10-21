@@ -28,7 +28,12 @@
     "scheduler_restart_epochs": 5,
     "mixup_probability": 0.5,
     "mixup_alpha": 0.5,
-    "num_workers": 0,
+    "num_workers": 4,
+    "device": "auto",
+    "mixed_precision": true,
+    "pin_memory": true,
+    "persistent_workers": true,
+    "allow_tf32": true,
     "random_seed": 2025,
     "validation_fraction": 0.2,
     "checkpoint_dir": "/kaggle/working/bird-clef-2025/artifacts/supervised_teacher"

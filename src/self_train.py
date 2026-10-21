@@ -22,7 +22,17 @@ from src.audio import AudioConfig, AudioPreprocessor
 from src.dataset import LabelledWaveformDataset
 from src.model import EfficientNetSED, SEDConfig
 from src.pseudo_labels import PseudoLabelStore
-from src.train import best_device, clip_logits, set_seed, validate, waveform_batch_to_inputs
+from src.train import (
+    clip_logits,
+    configure_accelerator,
+    cuda_amp_enabled,
+    data_loader_kwargs,
+    make_grad_scaler,
+    resolve_device,
+    set_seed,
+    validate,
+    waveform_batch_to_inputs,
+)
 
 
 def sampling_weights_from_scores(recording_ids: np.ndarray, scores: np.ndarray) -> tuple[list[str], np.ndarray]:
@@ -122,19 +132,25 @@ def mix_labelled_and_pseudo(
     )
 
 
-def train_one_student_iteration(config_path: Path, pseudo_directory: Path, epochs_override: int | None = None) -> Path:
+def train_one_student_iteration(
+    config_path: Path,
+    pseudo_directory: Path,
+    epochs_override: int | None = None,
+    device_override: str | None = None,
+) -> Path:
     root = config_path.parent.parent
     config = json.loads(config_path.read_text(encoding="utf-8"))
     training, self_training = config["training"], config["self_training"]
     set_seed(training["random_seed"])
-    device = best_device()
+    device = resolve_device(device_override or training.get("device", "auto"))
+    configure_accelerator(device, bool(training.get("allow_tf32", True)))
     paths = {name: root / value for name, value in config["paths"].items()}
     preprocessor = AudioPreprocessor(AudioConfig.from_json(config_path), seed=training["random_seed"])
     labelled_train = LabelledWaveformDataset("train", paths["split"], paths["label_mapping"], paths["train_audio_dir"], preprocessor)
     labelled_validation = LabelledWaveformDataset("validation", paths["split"], paths["label_mapping"], paths["train_audio_dir"], preprocessor)
     pseudo_train = PseudoLabelledWaveformDataset(pseudo_directory, paths["unlabeled_soundscapes_dir"], preprocessor)
     sampler = WeightedRandomSampler(pseudo_train.weights, num_samples=len(labelled_train), replacement=True)
-    loader_kwargs = {"batch_size": training["batch_size"], "num_workers": training["num_workers"]}
+    loader_kwargs = data_loader_kwargs(training, device)
     labelled_loader = DataLoader(labelled_train, shuffle=True, **loader_kwargs)
     pseudo_loader = DataLoader(pseudo_train, sampler=sampler, **loader_kwargs)
     validation_loader = DataLoader(labelled_validation, shuffle=False, **loader_kwargs)
@@ -151,6 +167,8 @@ def train_one_student_iteration(config_path: Path, pseudo_directory: Path, epoch
         optimizer, T_0=training["scheduler_restart_epochs"], T_mult=1, eta_min=training["final_learning_rate"]
     )
     loss_function = nn.BCEWithLogitsLoss()
+    mixed_precision = cuda_amp_enabled(training, device)
+    scaler = make_grad_scaler(device, mixed_precision)
     output_directory = root / self_training["checkpoint_dir"]
     output_directory.mkdir(parents=True, exist_ok=True)
     summary = weight_summary(pseudo_train.weights)
@@ -170,14 +188,18 @@ def train_one_student_iteration(config_path: Path, pseudo_directory: Path, epoch
                     labelled_chunks, labelled_targets, pseudo_chunks, pseudo_targets, self_training["mix_coefficient"]
                 )
                 inputs = waveform_batch_to_inputs(chunks, preprocessor, device)
-                targets = targets.to(device)
+                targets = targets.to(device, non_blocking=device.type == "cuda")
                 optimizer.zero_grad(set_to_none=True)
-                loss = loss_function(clip_logits(student(inputs)), targets)
-                loss.backward()
-                optimizer.step()
+                with torch.autocast(device_type=device.type, enabled=mixed_precision):
+                    loss = loss_function(clip_logits(student(inputs)), targets)
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
                 scheduler.step(epoch + (batch_index + 1) / len(labelled_loader))
                 losses.append(loss.item())
-            validation_loss, validation_auc, y_true, y_score = validate(student, validation_loader, preprocessor, device, loss_function)
+            validation_loss, validation_auc, y_true, y_score = validate(
+                student, validation_loader, preprocessor, device, loss_function, mixed_precision
+            )
             record = {"epoch": epoch + 1, "train_loss": float(np.mean(losses)), "validation_loss": validation_loss,
                       "validation_macro_auc": validation_auc, "learning_rate": optimizer.param_groups[0]["lr"]}
             writer.writerow(record)
@@ -192,6 +214,7 @@ def train_one_student_iteration(config_path: Path, pseudo_directory: Path, epoch
                     "audio_config": asdict(preprocessor.config), "training_config": training,
                     "self_training_config": self_training, "teacher_checkpoint": str(teacher_path),
                     "pseudo_label_directory": str(pseudo_directory), "pseudo_sampler_weight_summary": summary,
+                    "runtime": {"device": str(device), "mixed_precision": mixed_precision},
                 }, output_directory / "best_student_iteration_1.pt")
             print(json.dumps(record), flush=True)
     return output_directory / "best_student_iteration_1.pt"
@@ -202,5 +225,6 @@ if __name__ == "__main__":
     parser.add_argument("pseudo_directory", type=Path)
     parser.add_argument("--config", type=Path, default=Path("config/project_config.json"))
     parser.add_argument("--epochs", type=int)
+    parser.add_argument("--device", choices=("auto", "cpu", "cuda", "cuda:0", "mps"))
     arguments = parser.parse_args()
-    print(train_one_student_iteration(arguments.config, arguments.pseudo_directory, arguments.epochs))
+    print(train_one_student_iteration(arguments.config, arguments.pseudo_directory, arguments.epochs, arguments.device))

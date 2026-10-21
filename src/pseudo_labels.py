@@ -39,7 +39,14 @@ class PseudoLabelStore:
 
     def __init__(self, directory: str | Path) -> None:
         self.directory = Path(directory)
-        self.values = np.load(self.directory / "five_second_scores.npz")
+        # `np.load` returns a lazy NpzFile backed by one ZipFile/decompressor.
+        # A Dataset is then forked into multiple DataLoader workers on Linux;
+        # concurrent reads from that inherited handle cause zlib "invalid block"
+        # failures. Materialize every array and close the archive before workers
+        # are created. Arrays are read-only afterwards and shared copy-on-write
+        # by the normal Kaggle/Linux fork start method.
+        with np.load(self.directory / "five_second_scores.npz", allow_pickle=False) as archive:
+            self.values = {name: archive[name] for name in archive.files}
         self.metadata = json.loads((self.directory / "metadata.json").read_text(encoding="utf-8"))
 
     def soft_target_for_crop(self, recording_id: str, start_seconds: float) -> np.ndarray:

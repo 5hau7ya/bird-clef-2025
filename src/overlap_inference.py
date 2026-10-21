@@ -69,8 +69,6 @@ class OverlapAwareInferencer:
             (context_samples, context_samples + self.preprocessor.config.n_fft),
             mode="constant",
         )
-        padded = self.preprocessor.normalize_waveform(padded)
-        full_mel_power = self.preprocessor.mel_power_spectrogram(padded)
         input_step = round(
             self.settings.stride_seconds
             * self.preprocessor.config.sample_rate
@@ -78,8 +76,22 @@ class OverlapAwareInferencer:
         )
         width = self.preprocessor.config.spectrogram_width
         required_width = width + (intervals - 1) * input_step
+        padded = self.preprocessor.normalize_waveform(padded)
+        full_mel_power = self.preprocessor.mel_power_spectrogram(padded)
         if full_mel_power.shape[1] < required_width:
-            raise RuntimeError("Padded spectrogram is too short for the requested inference windows")
+            # A source duration marginally greater than a five-second boundary
+            # (for example, 60.001 s) needs one additional target interval.
+            # Add only zero-valued right context, then recompute the shared
+            # power Mel representation so every requested window is complete.
+            missing_columns = required_width - full_mel_power.shape[1]
+            padded = np.pad(
+                padded,
+                (0, missing_columns * self.preprocessor.config.hop_length + self.preprocessor.config.n_fft),
+                mode="constant",
+            )
+            full_mel_power = self.preprocessor.mel_power_spectrogram(padded)
+        if full_mel_power.shape[1] < required_width:
+            raise RuntimeError("Unable to construct enough padded spectrogram columns")
         windows = []
         for index in range(intervals):
             start = index * input_step

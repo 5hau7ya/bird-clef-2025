@@ -43,7 +43,13 @@
     "first_iteration_epochs": 25,
     "drop_path_rate": 0.15,
     "mix_coefficient": 0.5,
-    "checkpoint_dir": "/kaggle/working/bird-clef-2025/artifacts/self_training/iteration_1"
+    "checkpoint_dir": "/kaggle/working/bird-clef-2025/artifacts/self_training/iteration_1",
+    "pipeline_runs_dir": "/kaggle/working/bird-clef-2025/artifacts/self_training/runs",
+    "iteration_plan": [
+      {"iteration": 1, "pseudo_label_exponent": 1.0},
+      {"iteration": 2, "pseudo_label_exponent": 1.5384615385},
+      {"iteration": 3, "pseudo_label_exponent": 1.8181818182}
+    ]
   },
   "ensemble": {
     "final_ensemble_checkpoints": 3,

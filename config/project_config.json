@@ -48,7 +48,8 @@
     "unlabeled_soundscapes_dir": "/kaggle/input/competitions/birdclef-2025/train_soundscapes",
     "label_mapping": "/kaggle/working/bird-clef-2025/artifacts/label_mapping.json",
     "split": "/kaggle/working/bird-clef-2025/artifacts/train_validation_split.csv",
-    "data_audit": "/kaggle/working/bird-clef-2025/artifacts/data_audit.json"
+    "data_audit": "/kaggle/working/bird-clef-2025/artifacts/data_audit.json",
+    "pseudo_labels_root": "kaggle/working/bird-clef-2025/artifacts/pseudo_labels"
   },
   "inference": {
     "window_duration_seconds": 20,
@@ -56,5 +57,11 @@
     "batch_size": 16,
     "delta_shift_enabled": false,
     "temporal_smoothing_enabled": false
+  },
+  "pseudo_labels": {
+    "format": "five_second_scores",
+    "crop_duration_seconds": 20,
+    "crop_stride_seconds": 5,
+    "sampling_weight": "sum_over_classes_of_recording_maximum_score"
   }
 }

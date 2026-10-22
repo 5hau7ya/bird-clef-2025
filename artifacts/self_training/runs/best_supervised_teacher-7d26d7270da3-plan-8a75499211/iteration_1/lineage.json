@@ -1,0 +1,10 @@
+{
+  "iteration": 1,
+  "teacher_checkpoint": "artifacts/supervised_teacher/best_supervised_teacher.pt",
+  "pseudo_label_directory": "kaggle/working/bird-clef-2025/artifacts/pseudo_labels/best_supervised_teacher-7d26d7270da3-power-1",
+  "pseudo_label_exponent": 1.0,
+  "training_seed": 2025,
+  "best_validation_macro_auc": 0.8368758297336056,
+  "final_checkpoint": "/kaggle/working/bird-clef-2025/artifacts/self_training/runs/best_supervised_teacher-7d26d7270da3-plan-8a75499211/iteration_1/best_student_iteration_1.pt",
+  "training_data_version": "kaggle/working/bird-clef-2025/artifacts/pseudo_labels/best_supervised_teacher-7d26d7270da3-power-1"
+}

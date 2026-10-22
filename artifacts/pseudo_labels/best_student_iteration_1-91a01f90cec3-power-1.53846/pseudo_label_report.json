@@ -1,0 +1,135 @@
+{
+  "score_count": 24042672,
+  "segment_count": 116712,
+  "recording_count": 9726,
+  "high_confidence_predictions": [
+    {
+      "recording_id": "H07_20230508_073500",
+      "segment_start_seconds": 50.0,
+      "label": "blbwre1",
+      "score": 0.7908989787101746
+    },
+    {
+      "recording_id": "H06_20230425_065500",
+      "segment_start_seconds": 50.0,
+      "label": "roahaw",
+      "score": 0.7538209557533264
+    },
+    {
+      "recording_id": "H21_20230515_155500",
+      "segment_start_seconds": 55.0,
+      "label": "rumfly1",
+      "score": 0.744803249835968
+    },
+    {
+      "recording_id": "H07_20230508_073500",
+      "segment_start_seconds": 5.0,
+      "label": "blbwre1",
+      "score": 0.6915177702903748
+    },
+    {
+      "recording_id": "O201_20230429_122500",
+      "segment_start_seconds": 10.0,
+      "label": "blbwre1",
+      "score": 0.6864084005355835
+    },
+    {
+      "recording_id": "O201_20230429_114000",
+      "segment_start_seconds": 30.0,
+      "label": "blbwre1",
+      "score": 0.6764207482337952
+    },
+    {
+      "recording_id": "H14_20230518_083500",
+      "segment_start_seconds": 45.0,
+      "label": "smbani",
+      "score": 0.6156536340713501
+    },
+    {
+      "recording_id": "H32_20230427_135500",
+      "segment_start_seconds": 55.0,
+      "label": "amekes",
+      "score": 0.6127041578292847
+    },
+    {
+      "recording_id": "O201_20230429_122500",
+      "segment_start_seconds": 50.0,
+      "label": "blbwre1",
+      "score": 0.6112374067306519
+    },
+    {
+      "recording_id": "H07_20230424_134500",
+      "segment_start_seconds": 40.0,
+      "label": "blbwre1",
+      "score": 0.5889167189598083
+    },
+    {
+      "recording_id": "H19_20230509_171500",
+      "segment_start_seconds": 45.0,
+      "label": "babwar",
+      "score": 0.5805245637893677
+    },
+    {
+      "recording_id": "H07_20230503_060500",
+      "segment_start_seconds": 0.0,
+      "label": "blbwre1",
+      "score": 0.5795297026634216
+    },
+    {
+      "recording_id": "H10_20230516_090000",
+      "segment_start_seconds": 5.0,
+      "label": "cattyr",
+      "score": 0.5752871632575989
+    },
+    {
+      "recording_id": "H8920_20230520_150500",
+      "segment_start_seconds": 35.0,
+      "label": "whbman1",
+      "score": 0.5662003755569458
+    },
+    {
+      "recording_id": "H88_20230512_102000",
+      "segment_start_seconds": 55.0,
+      "label": "wbwwre1",
+      "score": 0.5647518634796143
+    },
+    {
+      "recording_id": "H83_20230506_101000",
+      "segment_start_seconds": 35.0,
+      "label": "smbani",
+      "score": 0.5634433627128601
+    },
+    {
+      "recording_id": "H09_20230512_053500",
+      "segment_start_seconds": 55.0,
+      "label": "cotfly1",
+      "score": 0.5578153729438782
+    },
+    {
+      "recording_id": "H21_20230424_100000",
+      "segment_start_seconds": 15.0,
+      "label": "blbwre1",
+      "score": 0.5548954606056213
+    },
+    {
+      "recording_id": "H94_20230503_170000",
+      "segment_start_seconds": 30.0,
+      "label": "blbwre1",
+      "score": 0.5529800057411194
+    },
+    {
+      "recording_id": "H28_20230504_111000",
+      "segment_start_seconds": 50.0,
+      "label": "rumfly1",
+      "score": 0.5524016618728638
+    }
+  ],
+  "segment_variation_recording": "H07_20230508_073500",
+  "segment_variation_labels": [
+    "blbwre1",
+    "whtdov",
+    "yeofly1",
+    "trsowl",
+    "compau"
+  ]
+}

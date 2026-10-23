@@ -53,7 +53,14 @@
   },
   "ensemble": {
     "final_ensemble_checkpoints": 3,
-    "checkpoint_paths": []
+    "checkpoint_paths": [
+      "artifacts/self_training/runs/best_supervised_teacher-7d26d7270da3-plan-8a75499211/iteration_1/best_student_iteration_1.pt",
+      "artifacts/self_training/runs/best_supervised_teacher-7d26d7270da3-plan-8a75499211/iteration_2_session_2/best_student_iteration_2.pt",
+      "artifacts/self_training/runs/best_supervised_teacher-7d26d7270da3-plan-8a75499211/iteration_3_session_3/best_student_iteration_3.pt"
+    ],
+    "score_aggregation": "equal_weight_mean",
+    "smoothing_kernel": [0.25, 0.5, 0.25],
+    "smoothing_stage": "framewise_probability_before_clip_max_pooling"
   },
   "paths": {
     "train_metadata": "/kaggle/input/competitions/birdclef-2025/train.csv",

@@ -1,0 +1,8 @@
+completed_at_utc=2026-10-23T07:27:50Z
+iteration=3
+epochs=25
+teacher_checkpoint=/kaggle/working/bird-clef-2025/artifacts/self_training/runs/best_supervised_teacher-7d26d7270da3-plan-8a75499211/iteration_2_session_2/best_student_iteration_2.pt
+teacher_run_status=accepted_early_stop
+teacher_logged_epochs=21
+pseudo_label_directory=/kaggle/working/bird-clef-2025/artifacts/pseudo_labels/best_student_iteration_2-c9465679e159-power-1.81818
+checkpoint=/kaggle/working/bird-clef-2025/artifacts/self_training/runs/best_supervised_teacher-7d26d7270da3-plan-8a75499211/iteration_3_session_3/best_student_iteration_3.pt

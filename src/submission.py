@@ -328,7 +328,7 @@ if __name__ == "__main__":
     parser.add_argument("--test-soundscapes", type=Path)
     parser.add_argument("--sample-submission", type=Path)
     parser.add_argument("--mapping", type=Path)
-    parser.add_argument("--output", type=Path, default=Path("artifacts/submission.csv"))
+    parser.add_argument("--output", type=Path, default=Path("/kaggle/working/submission.csv"))
     smoke_group = parser.add_mutually_exclusive_group()
     smoke_group.add_argument("--smoke-test", action="store_true", help="Only score one recording and save its five-second scores.")
     smoke_group.add_argument(

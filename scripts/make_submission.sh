@@ -20,4 +20,4 @@ fi
 python3 -m src.submission "${common_arguments[@]}" \
   --smoke-and-submit \
   --smoke-output "$ROOT/artifacts/submission_smoke_test.npz" \
-  --output "$ROOT/artifacts/submission.csv"
+  --output "/kaggle/working/submission.csv"

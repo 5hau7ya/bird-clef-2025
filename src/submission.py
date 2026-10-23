@@ -182,9 +182,14 @@ def prediction_rows_for_recording(
     return rows
 
 
-def verify_submission(path: str | Path, sample_submission_path: str | Path) -> dict[str, int]:
+def verify_submission(
+    path: str | Path,
+    sample_submission_path: str | Path,
+    expected_row_ids: Iterable[str] | None = None,
+) -> dict[str, int]:
     """Raise on schema, row-ID, duplicate, or non-finite-score errors."""
-    expected_header, expected_ids = read_submission_template(sample_submission_path)
+    expected_header, sample_row_ids = read_submission_template(sample_submission_path)
+    expected_ids = list(expected_row_ids) if expected_row_ids is not None else sample_row_ids
     with Path(path).open(newline="", encoding="utf-8") as handle:
         reader = csv.reader(handle)
         try:
@@ -203,6 +208,13 @@ def verify_submission(path: str | Path, sample_submission_path: str | Path) -> d
     return {"rows": len(rows), "class_columns": values.shape[1]}
 
 
+def row_ids_for_recording(recording_id: str, interval_count: int, stride_seconds: int = 5) -> list[str]:
+    """Generate competition row IDs such as ``soundscape_123_5`` … ``_60``."""
+    if not recording_id or interval_count < 1:
+        raise ValueError("A recording ID and at least one five-second interval are required")
+    return [f"{recording_id}_{(index + 1) * stride_seconds}" for index in range(interval_count)]
+
+
 def create_submission(
     ensemble: SharedWindowEnsemble,
     test_soundscapes_directory: str | Path,
@@ -212,8 +224,13 @@ def create_submission(
     output_path: str | Path,
     prefetched_interval_scores: dict[str, np.ndarray] | None = None,
 ) -> dict[str, Any]:
-    """Run shared-window inference over expected recordings and create a verified CSV."""
-    header, template_ids = read_submission_template(sample_submission_path)
+    """Run inference over every supplied soundscape and create a verified CSV.
+
+    The sample submission supplies the required class-column schema only.  Its
+    few example row IDs are not an inventory of the hidden scored soundscapes;
+    row IDs are generated from every actual ``*.ogg`` filename at runtime.
+    """
+    header, _ = read_submission_template(sample_submission_path)
     mapping_labels = label_order_from_mapping(mapping_path)
     if set(header[1:]) != set(mapping_labels):
         raise ValueError("Competition class columns do not match the authoritative 206-label mapping")
@@ -224,61 +241,45 @@ def create_submission(
     available_paths = {path.stem: path for path in soundscapes}
     if len(available_paths) != len(soundscapes):
         raise ValueError("Soundscape stems must be unique")
-    rows_by_recording: dict[str, list[str]] = {}
-    if fallback_mode:
-        # The test template names hidden recordings, so create a schema-correct
-        # diagnostic table for the fallback paths instead of fabricating a
-        # supposedly valid competition submission.
-        for path in soundscapes:
-            rows_by_recording[path.stem] = []
-        template_ids = []
-    else:
-        for row_id in template_ids:
-            recording_id, _ = parse_row_id(row_id, ensemble.settings.stride_seconds)
-            rows_by_recording.setdefault(recording_id, []).append(row_id)
+    rows_by_recording: dict[str, list[str]] = {path.stem: [] for path in soundscapes}
+    generated_row_ids: list[str] = []
     predictions: dict[str, np.ndarray] = {}
     prefetched_interval_scores = prefetched_interval_scores or {}
-    for recording_id, row_ids in sorted(rows_by_recording.items()):
+    for recording_id in sorted(rows_by_recording):
         if recording_id in prefetched_interval_scores:
             scores = prefetched_interval_scores[recording_id]
         else:
             audio_path = available_paths.get(recording_id)
             if audio_path is None:
-                raise FileNotFoundError(f"Missing competition soundscape required by template: {recording_id}.ogg")
+                raise FileNotFoundError(f"Missing soundscape: {recording_id}.ogg")
             scores, _ = ensemble.predict_file(audio_path)
-        if fallback_mode:
-            row_ids = [
-                f"{recording_id}_{(index + 1) * ensemble.settings.stride_seconds}"
-                for index in range(len(scores))
-            ]
-            rows_by_recording[recording_id] = row_ids
-            template_ids.extend(row_ids)
+        if not fallback_mode and len(scores) != 12:
+            raise ValueError(
+                f"Expected twelve five-second intervals for 60-second test soundscape {recording_id}; got {len(scores)}"
+            )
+        row_ids = row_ids_for_recording(recording_id, len(scores), ensemble.settings.stride_seconds)
+        rows_by_recording[recording_id] = row_ids
+        generated_row_ids.extend(row_ids)
         predictions.update(
             prediction_rows_for_recording(recording_id, scores, row_ids, ensemble.settings.stride_seconds)
         )
-    if set(predictions) != set(template_ids):
-        raise RuntimeError("Not every template row received exactly one prediction")
+    if len(generated_row_ids) != len(set(generated_row_ids)) or set(predictions) != set(generated_row_ids):
+        raise RuntimeError("Not every generated row received exactly one prediction")
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(header)
-        for row_id in template_ids:
+        for row_id in generated_row_ids:
             writer.writerow([row_id, *predictions[row_id][reorder].tolist()])
     if fallback_mode:
-        with output.open(newline="", encoding="utf-8") as handle:
-            reader = csv.reader(handle)
-            actual_header = next(reader)
-            output_rows = list(reader)
-        values = np.asarray([[float(value) for value in row[1:]] for row in output_rows], dtype=np.float32)
-        if actual_header != header or len(output_rows) != len(set(row[0] for row in output_rows)) or not np.isfinite(values).all():
-            raise ValueError("Fallback prediction table failed schema, duplicate-ID, or finite-score validation")
+        verified = verify_submission(output, sample_submission_path, generated_row_ids)
         summary: dict[str, Any] = {
-            "rows": len(output_rows), "class_columns": 206, "competition_submission": False,
+            **verified, "competition_submission": False,
             "mode": "train_soundscape_fallback_debug",
         }
     else:
-        summary = verify_submission(output, sample_submission_path)
+        summary = verify_submission(output, sample_submission_path, generated_row_ids)
         summary["competition_submission"] = True
         summary["mode"] = "competition_test_soundscapes"
     summary["recordings"] = len(rows_by_recording)
@@ -330,7 +331,7 @@ if __name__ == "__main__":
     parser.add_argument("--test-soundscapes", type=Path)
     parser.add_argument("--sample-submission", type=Path)
     parser.add_argument("--mapping", type=Path)
-    parser.add_argument("--output", type=Path, default=Path("/kaggle/working/submission.csv"))
+    parser.add_argument("--output", type=Path, default=Path("artifacts/submission.csv"))
     smoke_group = parser.add_mutually_exclusive_group()
     smoke_group.add_argument("--smoke-test", action="store_true", help="Only score one recording and save its five-second scores.")
     smoke_group.add_argument(

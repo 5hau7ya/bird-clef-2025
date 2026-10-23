@@ -75,7 +75,7 @@
     "sample_submission": "/kaggle/input/competitions/birdclef-2025/sample_submission.csv",
     "train_audio_dir": "/kaggle/input/competitions/birdclef-2025/train_audio",
     "unlabeled_soundscapes_dir": "/kaggle/input/competitions/birdclef-2025/train_soundscapes",
-    "test_soundscapes_dir": "/kaggle/input/competitions/bird-clef-2025/test_soundscapes",
+    "test_soundscapes_dir": "/kaggle/input/competitions/birdclef-2025/test_soundscapes",
     "label_mapping": "/kaggle/working/bird-clef-2025/artifacts/label_mapping.json",
     "split": "/kaggle/working/bird-clef-2025/artifacts/train_validation_split.csv",
     "data_audit": "/kaggle/working/bird-clef-2025/artifacts/data_audit.json",

@@ -331,14 +331,14 @@ if __name__ == "__main__":
     parser.add_argument("--test-soundscapes", type=Path)
     parser.add_argument("--sample-submission", type=Path)
     parser.add_argument("--mapping", type=Path)
-    parser.add_argument("--output", type=Path, default=Path("artifacts/submission.csv"))
+    parser.add_argument("--output", type=Path, default=Path("/kaggle/working/submission.csv"))
     smoke_group = parser.add_mutually_exclusive_group()
     smoke_group.add_argument("--smoke-test", action="store_true", help="Only score one recording and save its five-second scores.")
     smoke_group.add_argument(
         "--smoke-and-submit", action="store_true",
         help="Smoke-test one recording, reuse those scores, then write the full submission.",
     )
-    parser.add_argument("--smoke-output", type=Path, default=Path("artifacts/submission_smoke_test.npz"))
+    parser.add_argument("--smoke-output", type=Path, default=Path("/kaggle/working/submission_smoke_test.npz"))
     parser.add_argument("--device", choices=("cpu",), default="cpu", help="Submission inference is CPU-only.")
     parser.add_argument("--batch-size", type=int)
     arguments = parser.parse_args()

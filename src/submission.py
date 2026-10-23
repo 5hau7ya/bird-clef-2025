@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import math
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -62,6 +61,31 @@ def label_order_from_mapping(mapping_path: str | Path) -> list[str]:
     if len(labels) != 206 or len(labels) != len(set(labels)):
         raise ValueError("The label mapping must contain exactly 206 unique labels")
     return labels
+
+
+def resolve_soundscapes(
+    test_soundscapes_directory: str | Path,
+    train_soundscapes_directory: str | Path | None = None,
+    fallback_limit: int = 3,
+) -> tuple[list[Path], bool]:
+    """Return test soundscapes, or a small training fallback for notebook checks.
+
+    The fallback mirrors the competition notebook pattern.  It is deliberately
+    marked as non-competition inference because its generated row IDs are not
+    the IDs from the hidden test-set template.
+    """
+    test_paths = sorted(Path(test_soundscapes_directory).glob("*.ogg"))
+    if test_paths:
+        return test_paths, False
+    if train_soundscapes_directory is None:
+        raise FileNotFoundError(f"No .ogg files in test soundscapes: {test_soundscapes_directory}")
+    fallback_paths = sorted(Path(train_soundscapes_directory).glob("*.ogg"))[:fallback_limit]
+    if not fallback_paths:
+        raise FileNotFoundError(
+            f"No .ogg files in test soundscapes or fallback train soundscapes: "
+            f"{test_soundscapes_directory}, {train_soundscapes_directory}"
+        )
+    return fallback_paths, True
 
 
 class SharedWindowEnsemble:
@@ -180,32 +204,53 @@ def verify_submission(path: str | Path, sample_submission_path: str | Path) -> d
 def create_submission(
     ensemble: SharedWindowEnsemble,
     test_soundscapes_directory: str | Path,
+    train_soundscapes_directory: str | Path | None,
     sample_submission_path: str | Path,
     mapping_path: str | Path,
     output_path: str | Path,
     prefetched_interval_scores: dict[str, np.ndarray] | None = None,
-) -> dict[str, int]:
+) -> dict[str, Any]:
     """Run shared-window inference over expected recordings and create a verified CSV."""
     header, template_ids = read_submission_template(sample_submission_path)
     mapping_labels = label_order_from_mapping(mapping_path)
     if set(header[1:]) != set(mapping_labels):
         raise ValueError("Competition class columns do not match the authoritative 206-label mapping")
     reorder = np.asarray([mapping_labels.index(label) for label in header[1:]], dtype=np.int64)
+    soundscapes, fallback_mode = resolve_soundscapes(
+        test_soundscapes_directory, train_soundscapes_directory
+    )
+    available_paths = {path.stem: path for path in soundscapes}
+    if len(available_paths) != len(soundscapes):
+        raise ValueError("Soundscape stems must be unique")
     rows_by_recording: dict[str, list[str]] = {}
-    for row_id in template_ids:
-        recording_id, _ = parse_row_id(row_id, ensemble.settings.stride_seconds)
-        rows_by_recording.setdefault(recording_id, []).append(row_id)
+    if fallback_mode:
+        # The test template names hidden recordings, so create a schema-correct
+        # diagnostic table for the fallback paths instead of fabricating a
+        # supposedly valid competition submission.
+        for path in soundscapes:
+            rows_by_recording[path.stem] = []
+        template_ids = []
+    else:
+        for row_id in template_ids:
+            recording_id, _ = parse_row_id(row_id, ensemble.settings.stride_seconds)
+            rows_by_recording.setdefault(recording_id, []).append(row_id)
     predictions: dict[str, np.ndarray] = {}
     prefetched_interval_scores = prefetched_interval_scores or {}
-    test_directory = Path(test_soundscapes_directory)
     for recording_id, row_ids in sorted(rows_by_recording.items()):
         if recording_id in prefetched_interval_scores:
             scores = prefetched_interval_scores[recording_id]
         else:
-            audio_path = test_directory / f"{recording_id}.ogg"
-            if not audio_path.is_file():
-                raise FileNotFoundError(f"Missing competition soundscape required by template: {audio_path}")
+            audio_path = available_paths.get(recording_id)
+            if audio_path is None:
+                raise FileNotFoundError(f"Missing competition soundscape required by template: {recording_id}.ogg")
             scores, _ = ensemble.predict_file(audio_path)
+        if fallback_mode:
+            row_ids = [
+                f"{recording_id}_{(index + 1) * ensemble.settings.stride_seconds}"
+                for index in range(len(scores))
+            ]
+            rows_by_recording[recording_id] = row_ids
+            template_ids.extend(row_ids)
         predictions.update(
             prediction_rows_for_recording(recording_id, scores, row_ids, ensemble.settings.stride_seconds)
         )
@@ -218,18 +263,33 @@ def create_submission(
         writer.writerow(header)
         for row_id in template_ids:
             writer.writerow([row_id, *predictions[row_id][reorder].tolist()])
-    summary = verify_submission(output, sample_submission_path)
+    if fallback_mode:
+        with output.open(newline="", encoding="utf-8") as handle:
+            reader = csv.reader(handle)
+            actual_header = next(reader)
+            output_rows = list(reader)
+        values = np.asarray([[float(value) for value in row[1:]] for row in output_rows], dtype=np.float32)
+        if actual_header != header or len(output_rows) != len(set(row[0] for row in output_rows)) or not np.isfinite(values).all():
+            raise ValueError("Fallback prediction table failed schema, duplicate-ID, or finite-score validation")
+        summary: dict[str, Any] = {
+            "rows": len(output_rows), "class_columns": 206, "competition_submission": False,
+            "mode": "train_soundscape_fallback_debug",
+        }
+    else:
+        summary = verify_submission(output, sample_submission_path)
+        summary["competition_submission"] = True
+        summary["mode"] = "competition_test_soundscapes"
     summary["recordings"] = len(rows_by_recording)
     return summary
 
 
 def smoke_test(
-    ensemble: SharedWindowEnsemble, test_soundscapes_directory: str | Path, output_path: str | Path
+    ensemble: SharedWindowEnsemble, soundscapes: Iterable[Path], output_path: str | Path
 ) -> tuple[dict[str, int], np.ndarray]:
     """Run a single recording before full inference and persist its interval scores."""
-    soundscapes = sorted(Path(test_soundscapes_directory).glob("*.ogg"))
+    soundscapes = sorted(soundscapes)
     if not soundscapes:
-        raise FileNotFoundError(f"No .ogg test soundscapes in {test_soundscapes_directory}")
+        raise FileNotFoundError("No soundscapes supplied for smoke testing")
     selected = soundscapes[0]
     scores, counts = ensemble.predict_file(selected)
     if scores.shape[1] != 206 or not np.isfinite(scores).all():
@@ -286,16 +346,24 @@ if __name__ == "__main__":
     weights = arguments.weight if arguments.weight is not None else configured_weights
     ensemble = SharedWindowEnsemble(checkpoint_paths, weights or None, settings, arguments.device)
     test_directory = arguments.test_soundscapes or configured_data_paths["test_soundscapes_dir"]
+    soundscapes, fallback_mode = resolve_soundscapes(test_directory, configured_data_paths["unlabeled_soundscapes_dir"])
+    if fallback_mode:
+        print("test_soundscapes is empty; using the first three train_soundscapes for a debug-only run.", flush=True)
     if arguments.smoke_test:
-        summary, _ = smoke_test(ensemble, test_directory, arguments.smoke_output)
+        summary, _ = smoke_test(ensemble, soundscapes, arguments.smoke_output)
+        summary["competition_submission"] = False
+        summary["mode"] = "train_soundscape_fallback_debug" if fallback_mode else "competition_test_soundscapes"
         print(json.dumps(summary, indent=2))
     else:
         sample_submission = arguments.sample_submission or configured_data_paths["sample_submission"]
         mapping = arguments.mapping or configured_data_paths["label_mapping"]
         prefetched = None
         if arguments.smoke_and_submit:
-            smoke_summary, smoke_scores = smoke_test(ensemble, test_directory, arguments.smoke_output)
+            smoke_summary, smoke_scores = smoke_test(ensemble, soundscapes, arguments.smoke_output)
             prefetched = {smoke_summary["recording"]: smoke_scores}
         print(json.dumps(
-            create_submission(ensemble, test_directory, sample_submission, mapping, arguments.output, prefetched), indent=2
+            create_submission(
+                ensemble, test_directory, configured_data_paths["unlabeled_soundscapes_dir"], sample_submission,
+                mapping, arguments.output, prefetched,
+            ), indent=2
         ))

@@ -96,13 +96,15 @@ class SharedWindowEnsemble:
         checkpoint_paths: Iterable[str | Path],
         weights: Iterable[float] | None = None,
         settings: SubmissionSettings | None = None,
-        device_override: str | None = None,
+        device_override: str | None = "cpu",
     ) -> None:
         self.paths = [Path(path) for path in checkpoint_paths]
         if not self.paths:
             raise ValueError("At least one checkpoint is required")
         self.settings = settings or SubmissionSettings()
-        self.device = resolve_device(device_override or "auto")
+        if device_override not in {None, "cpu"}:
+            raise ValueError("Final submission inference is configured for CPU only")
+        self.device = resolve_device("cpu")
         configure_accelerator(self.device, allow_tf32=True)
         payloads: list[dict[str, Any]] = []
         for path in self.paths:
@@ -336,7 +338,7 @@ if __name__ == "__main__":
         help="Smoke-test one recording, reuse those scores, then write the full submission.",
     )
     parser.add_argument("--smoke-output", type=Path, default=Path("artifacts/submission_smoke_test.npz"))
-    parser.add_argument("--device", choices=("auto", "cpu", "cuda", "cuda:0", "mps"), default="auto")
+    parser.add_argument("--device", choices=("cpu",), default="cpu", help="Submission inference is CPU-only.")
     parser.add_argument("--batch-size", type=int)
     arguments = parser.parse_args()
     configured_paths, configured_weights, settings, configured_data_paths = _configured_final_paths(arguments.config)

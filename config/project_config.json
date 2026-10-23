@@ -82,6 +82,7 @@
     "pseudo_labels_root": "kaggle/working/bird-clef-2025/artifacts/pseudo_labels"
   },
   "inference": {
+    "device": "cpu",
     "window_duration_seconds": 20,
     "window_stride_seconds": 5,
     "batch_size": 16,

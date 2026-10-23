@@ -11,7 +11,7 @@ export MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp/matplotlib}"
 
 common_arguments=(
   --config "$ROOT/config/project_config.json"
-  --device "${DEVICE:-cuda}"
+  --device cpu
 )
 if [[ -n "${BATCH_SIZE:-}" ]]; then
   common_arguments+=(--batch-size "$BATCH_SIZE")

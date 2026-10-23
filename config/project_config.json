@@ -60,7 +60,14 @@
     ],
     "score_aggregation": "equal_weight_mean",
     "smoothing_kernel": [0.25, 0.5, 0.25],
-    "smoothing_stage": "framewise_probability_before_clip_max_pooling"
+    "smoothing_stage": "framewise_probability_before_clip_max_pooling",
+    "selected_checkpoint_paths": [
+      "artifacts/self_training/runs/best_supervised_teacher-7d26d7270da3-plan-8a75499211/iteration_2_session_2/best_student_iteration_2.pt",
+      "artifacts/self_training/runs/best_supervised_teacher-7d26d7270da3-plan-8a75499211/iteration_3_session_3/best_student_iteration_3.pt"
+    ],
+    "selected_weights": [0.5, 0.5],
+    "smoothing_enabled": false,
+    "selection_evidence": "Iteration 2 + iteration 3 equal-weight mean: 0.87271523 macro ROC-AUC; smoothing and the three-model mean were worse."
   },
   "paths": {
     "train_metadata": "/kaggle/input/competitions/birdclef-2025/train.csv",
@@ -68,6 +75,7 @@
     "sample_submission": "/kaggle/input/competitions/birdclef-2025/sample_submission.csv",
     "train_audio_dir": "/kaggle/input/competitions/birdclef-2025/train_audio",
     "unlabeled_soundscapes_dir": "/kaggle/input/competitions/birdclef-2025/train_soundscapes",
+    "test_soundscapes_dir": "/kaggle/input/competitions/bird-clef-2025/test_soundscapes",
     "label_mapping": "/kaggle/working/bird-clef-2025/artifacts/label_mapping.json",
     "split": "/kaggle/working/bird-clef-2025/artifacts/train_validation_split.csv",
     "data_audit": "/kaggle/working/bird-clef-2025/artifacts/data_audit.json",

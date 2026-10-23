@@ -131,9 +131,17 @@ class OverlapAwareInferencer:
         return trimmed.reshape(intervals, frames_per_interval, stitched.shape[1]).max(axis=1)
 
     @torch.no_grad()
-    def predict_waveform(self, waveform: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """Return `(interval_scores, overlap_counts)` for one source waveform."""
-        windows, intervals = self.windows_from_waveform(waveform)
+    def predict_windows(self, windows: torch.Tensor, intervals: int) -> tuple[np.ndarray, np.ndarray]:
+        """Score precomputed model windows and return five-second probabilities.
+
+        This is intentionally separate from :meth:`windows_from_waveform` so
+        an ensemble can calculate the padded spectrogram and its windows once,
+        then feed the identical tensor to every checkpoint.
+        """
+        if windows.ndim != 4 or windows.shape[1] != 3:
+            raise ValueError("windows must have shape (windows, 3, mel_bins, time_steps)")
+        if intervals < 1 or len(windows) != intervals:
+            raise ValueError("The number of windows must equal the number of target intervals")
         self.model.eval()
         score_batches = []
         for batch in windows.split(self.settings.batch_size):
@@ -146,6 +154,12 @@ class OverlapAwareInferencer:
             raise ValueError("Model output frame count is incompatible with the configured stride")
         stitched, counts = self.stitch_window_scores(window_scores, int(step_frames))
         return self.pool_intervals(stitched, output_frames, intervals), counts
+
+    @torch.no_grad()
+    def predict_waveform(self, waveform: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Return `(interval_scores, overlap_counts)` for one source waveform."""
+        windows, intervals = self.windows_from_waveform(waveform)
+        return self.predict_windows(windows, intervals)
 
     def predict_file(self, path: str | Path) -> tuple[np.ndarray, np.ndarray]:
         return self.predict_waveform(self.preprocessor.load_audio(path))

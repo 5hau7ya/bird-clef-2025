@@ -1,12 +1,15 @@
 # bird-clef-2025
 
-## Introduction
+## Architecture
 
 - The project is a multi-label acoustic species detection system built around EfficientNet-B0, sound event detection, semi supervised learning, and ensemble inference for the [BirdCLEF+ 2025](https://www.kaggle.com/competitions/birdclef-2025) competition held on Kaggle.
 - BirdCLEF+ 2025 involves identyfing species from environmental audio recordings. A recording may contain several overlapping vocalisations, substantial environmental noise, and species that are difficult to identify from a short segment.
+
 - The overall architecture of the project is as follows:
 
 <img width="1448" height="1086" alt="Audio Classification Training Pipeline" src="https://github.com/user-attachments/assets/bde6b3bd-c233-49af-b7d2-7fd2a3912650" />
+
+    1. 
 
 - The structure of the repository is as follows:
   
@@ -53,8 +56,16 @@ bird-clef-2025/
 | `src/ensemble_evaluation.py` | Individual checkpoint, pair, three-model, and smoothing comparison. |
 | `src/submission.py` | CPU-only selected-ensemble inference and verified CSV generation. |
 
-`config/project_config.json`: keeps signal parameters, model choices, paths, training settings, self-training plan, and final ensemble choice together.
+- `config/project_config.json`: keeps signal parameters, model choices, paths, training settings, self-training plan, and final ensemble choice together.
 
-`bird-clef-2025-train.ipynb`: consolidated training notebook. The actual model was trained in parts and checkpoints were saved because of the 12 hour limit on Kaggle, this notebook is the concatenation of those small parts.
+- `bird-clef-2025-train.ipynb`: consolidated training notebook. The actual model was trained in parts and checkpoints were saved because of the 12 hour limit on Kaggle, this notebook is the concatenation of those small parts.
 
-`bird-clef-2025-inference.ipynb`: Kaggle notebook used for generating the final `submission.csv`. It runs on CPU as per the competitions requirements.
+- `bird-clef-2025-inference.ipynb`: Kaggle notebook used for generating the final `submission.csv`. It runs on CPU as per the competitions requirements.
+
+- The trained checkpoints are available [here](https://www.kaggle.com/datasets/shaury4/bird-clef-2025-dataset)
+
+## Setup
+
+- To train the model upload the `bird-clef-2025-train.ipynb` on Kaggle and add BirdCLEF+ 2025 dataset as input. Alternatively you can use this [notebook](https://www.kaggle.com/code/shaury4/bird-clef-2025-train) on Kaggle directly. If you are training the model locally then update the path of the dataset in `project_config.json` accordingly.
+- To generate submission.csv upload the `bird-clef-2025-inference.ipynb` on Kaggle and add this [dataset](https://www.kaggle.com/datasets/shaury4/bird-clef-2025-dataset) along with the BirdCLEF+ 2025 dataset as input. Alternatively you can use this [notebook](https://www.kaggle.com/code/shaury4/bird-clef-2025-inference) on Kaggle directly. If you are inferring from the model locally then update the path of the dataset in the notebook and in `project_config.json` accordingly. In order to infer from the model on custom dataset update the path of the dataset in the notebook and in `project_config.json` accordingly.
+- Note: `bird-clef-2025-train.ipynb` has been updated but `bird-clef-2025-inference.ipynb` is yet to be updated, hence if you train the model then you will have to make some changes in `bird-clef-2025-inference.ipynb` and `project_config.json` to match the paths of the required checkpoints. I will be updating `bird-clef-2025-inference.ipynb` soon. Thanks for your understanding.

@@ -6,6 +6,8 @@
 - BirdCLEF+ 2025 involves identyfing species from environmental audio recordings. A recording may contain several overlapping vocalisations, substantial environmental noise, and species that are difficult to identify from a short segment.
 - The overall architecture of the project is as follows:
 
+<img width="1448" height="1086" alt="Audio Classification Training Pipeline" src="https://github.com/user-attachments/assets/bde6b3bd-c233-49af-b7d2-7fd2a3912650" />
+
 - The structure of the repository is as follows:
   
 ```text

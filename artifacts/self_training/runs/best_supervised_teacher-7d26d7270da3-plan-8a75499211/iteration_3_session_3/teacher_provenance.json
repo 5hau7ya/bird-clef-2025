@@ -1,6 +1,0 @@
-{
-  "teacher_checkpoint": "/kaggle/working/bird-clef-2025/artifacts/self_training/runs/best_supervised_teacher-7d26d7270da3-plan-8a75499211/iteration_2_session_2/best_student_iteration_2.pt",
-  "iteration_2_directory": "/kaggle/working/bird-clef-2025/artifacts/self_training/runs/best_supervised_teacher-7d26d7270da3-plan-8a75499211/iteration_2_session_2",
-  "teacher_run_status": "accepted_early_stop",
-  "logged_teacher_epochs": 21
-}

@@ -42,6 +42,25 @@
    * The network is an EfficientNet feature extractor followed by a temporal sound event detection head.
 
 4. Training the supervised teacher (`train.py`)
+   * We train the initial teacher which is the supervised baseline for the entire project
+   * Waveform-level MixUp: training pipeline randomly applies MixUp to the audio waveforms. MixUp is applied with probability 0.5. Mixing is done before the spectrogram transformation. This allows the CNN to learn from blended acoustic signals rather than merely interpolating already-generated spectrograms.
+   
+
+Given two waveforms $(x_i, x_j)$ and their corresponding label vectors $(y_i, y_j)$, Mixup generates a new training sample as follows:
+
+$$
+\tilde{x} = \lambda x_i + (1-\lambda)x_j
+$$
+
+$$
+\tilde{y} = \lambda y_i + (1-\lambda)y_j
+$$
+
+The mixing coefficient is sampled from a Beta distribution:
+
+$$
+\lambda \sim \operatorname{Beta}(0.5, 0.5)
+$$
 
 ## Repository Structure
 

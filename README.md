@@ -9,7 +9,41 @@
 
 <img width="1448" height="1086" alt="Audio Classification Training Pipeline" src="https://github.com/user-attachments/assets/bde6b3bd-c233-49af-b7d2-7fd2a3912650" />
 
-    1. 
+1. Dataset Preparation and Auditing (`data_audit.py` & `dataset.py`)
+   
+   1.1 Authoritative Label Mapping: using `sample_submission.csv`, we create two mappings — `label2ind` (maps species label to an integer) and `ind2label` (reverse mapping of `label2ind`) — inside the `label_mapping.json` file.
+   
+   1.2 Recording-Level Training and Validation Split: The split is grouped by source filename rather than by randomly selected audio crops. This prevents multiple rows originating from the same recording from being assigned to both training and validation. The code additionally preserves rare label representation.
+
+2. Audio Preprocessing Architecture (`audio.py`)
+   * Converts raw audio into a normalized spectrogram that the EfficientNet model will process:
+    ```text
+              Raw audio waveform
+         Mono, resampled to 32,000 Hz
+                      ↓
+       20-second crop or zero-padding
+            640,000 audio samples
+                      ↓
+      Waveform normalization and STFT
+    Convert audio into time-frequency energy
+                      ↓
+       224-bin Mel power spectrogram
+          80 dB range, scaled to [0, 1]
+                      ↓
+    ┌────────────────────────────────────────┐
+    │           EfficientNet input           │
+    │       Tensor shape: (3, 224, 512)      │
+    └────────────────────────────────────────┘
+    ```
+
+3. Neural network architecture: EfficientNetSED (`audio.py`)
+   <img width="3584" height="303" alt="sed_architecture" src="https://github.com/user-attachments/assets/e29c726d-d2a1-434c-b777-1a23773a319c" />
+
+   * The network is an EfficientNet feature extractor followed by a temporal sound event detection head.
+
+4. Training the supervised teacher (`train.py`)
+
+## Repository Structure
 
 - The structure of the repository is as follows:
   

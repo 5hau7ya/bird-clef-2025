@@ -44,23 +44,20 @@
 4. Training the supervised teacher (`train.py`)
    * We train the initial teacher which is the supervised baseline for the entire project
    * Waveform-level MixUp: training pipeline randomly applies MixUp to the audio waveforms. MixUp is applied with probability 0.5. Mixing is done before the spectrogram transformation. This allows the CNN to learn from blended acoustic signals rather than merely interpolating already-generated spectrograms.
-   
 
       Given two waveforms $(x_i, x_j)$ and their corresponding label vectors $(y_i, y_j)$, Mixup generates a new training sample as follows:
-      
-      $$
+
+$$
       \tilde{x} = \lambda x_i + (1-\lambda)x_j
-      $$
-      
-      $$
+$$
+
+$$
       \tilde{y} = \lambda y_i + (1-\lambda)y_j
-      $$
-      
-      The mixing coefficient is sampled from a Beta distribution:
-      
-      $$
+$$
+
+$$
       \lambda \sim \beta(0.5, 0.5)
-      $$
+$$
 
 * Training Objective: We use binary cross entropy with logits. The optimiser is AdamW with an initial learning rate of $5 \times 10^{-4}$ and weight decay of $10^{-4}$. The learning rate follows a cosine annealing curve that triggers a warm restart every five epochs.
 * After every epoch, macro ROC-AUC is evaluated on a fixed validation set and the best checkpoint is chosen accordingly. The best supervised teacher validation macro ROC-AUC was 0.84077.

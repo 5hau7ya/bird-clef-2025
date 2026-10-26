@@ -59,7 +59,7 @@ $$
 The mixing coefficient is sampled from a Beta distribution:
 
 $$
-\lambda \sim \operatorname{Beta}(0.5, 0.5)
+\lambda \sim \beta(0.5, 0.5)
 $$
 
 ## Repository Structure

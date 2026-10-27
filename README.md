@@ -43,6 +43,8 @@
 
 4. Training the supervised teacher (`train.py`)
    * We train the initial teacher which is the supervised baseline for the entire project
+   * Training Objective: We use binary cross entropy with logits. The optimiser is AdamW with an initial learning rate of $5 \times 10^{-4}$ and weight decay of $10^{-4}$. The learning rate follows a cosine annealing curve that triggers a warm restart every five epochs.
+   * After every epoch, macro ROC-AUC is evaluated on a fixed validation set and the best checkpoint is chosen accordingly. The best supervised teacher validation macro ROC-AUC was 0.84077.
    * Waveform-level MixUp: training pipeline randomly applies MixUp to the audio waveforms. MixUp is applied with probability 0.5. Mixing is done before the spectrogram transformation. This allows the CNN to learn from blended acoustic signals rather than merely interpolating already-generated spectrograms.
 
       Given two waveforms $(x_i, x_j)$ and their corresponding label vectors $(y_i, y_j)$, Mixup generates a new training sample as follows:
@@ -59,8 +61,27 @@ $$
       \lambda \sim \beta(0.5, 0.5)
 $$
 
-* Training Objective: We use binary cross entropy with logits. The optimiser is AdamW with an initial learning rate of $5 \times 10^{-4}$ and weight decay of $10^{-4}$. The learning rate follows a cosine annealing curve that triggers a warm restart every five epochs.
-* After every epoch, macro ROC-AUC is evaluated on a fixed validation set and the best checkpoint is chosen accordingly. The best supervised teacher validation macro ROC-AUC was 0.84077.
+
+5. Inference (`overlap_inference.py`)
+   * The model is trained on 20 second audio crops, but the competition requires predictions in five second intervals. For a 60 second recording the model must produce 12 separate predictions for each 5 second interval.
+   * The model constructs one 20 second window centred on each 5 second interval. The windows that extend beyond the physical recording boundaries are zero padded. We get 12 overlapping 20 second windows. The windows are converted into Mel spectrograms and passed through the EfficientNetSED model to obtain framewise species probabilities of shape (206, 16). Every 20 second interval gets 16 temporal predictions (i.e. prediction for each 1.25 second interval)
+   * Predictions from overlapping windows are temporally aligned and averaged giving 4 temporal predictions for each 5 second window. Each 5 second window get's it prediction by max pooling in group of 4.
+     
+     <img width="2307" height="879" alt="overlap_windows" src="https://github.com/user-attachments/assets/67f9412e-6bbd-4be5-80b7-27bf3eb88855" />
+
+6. Pseudo Label Generation (`pseudo_label.py`)
+   * The 5 second predictions are converted back to 20 second training targets by max pooling. The subsequent models will be trained on 20 second interval predictions.
+
+7. Noisy Student self-training architecture (`self_train.py`)
+   * Each student is initiated by the weights of the preceding models checkpoint weights.
+   * Real and pseudo labels are mixed using a coefficient of 0.5
+   * Three iterations were run
+
+8. Ensemble
+   * Student from iteration 2 and iteration 3 are chosen in the ensemble and equal weightage is given to both of their predictions
+     
+10. Results
+   <img width="1784" height="871" alt="validation_results" src="https://github.com/user-attachments/assets/4bfeded8-6f94-4d7b-a646-8e114031fe5d" />
 
 ## Repository Structure
 
